@@ -1,0 +1,12 @@
+
+rip44d
+
+This is a custom RIPv2 daemon which is only useful if you're participating
+in the amateur radio 44/8 Amprnet gateways tunnel network. It updates
+ipip tunnel mesh routes based on RIP updates coming from a master server.
+rip44d does not even transmit RIP packets by itself.
+
+More information can be found in the ampr-gateways wiki:
+
+http://wiki.ampr-gateways.org/index.php?title=Rip44d
+
