@@ -22,9 +22,11 @@
 # v1.1 - 2011-09-14 Heikki Hannikainen, OH7LZB
 #	* Enable multicast on the tunnel interface automatically
 #
+# v1.2 - 2012-01-01 Ronald Jochems, PD1ACF
+#	* Added syslog functionality, using module : http://perldoc.perl.org/Sys/Syslog.html
+
 # Things to do in the future:
 #
-# - proper logging to syslog
 # - support for better authentication, if one would be supported
 # - support for multiple RIP masters, to fix the single point of failure
 #
@@ -34,6 +36,7 @@ use warnings;
 
 use IO::Socket::Multicast;
 use Getopt::Std;
+use Sys::Syslog;
 
 use constant {
 	RIP_HDR_LEN => 4,
@@ -49,6 +52,8 @@ my $tunnel_if = 'tunl0';
 my $routebin = '/sbin/ip';
 my $ifconfig = '/sbin/ifconfig';
 my $verbose = 0;
+my $syslog = 0;
+my $UDP_port=520;
 # Local gateway addresses (whose routes are skipped)
 my %my_addresses;
 # Allowed route destination networks
@@ -65,17 +70,27 @@ my $route_ttl = 7*24*60*60;
 my %current_routes;
 
 my $me = 'rip44d';
-my $VERSION = '1.1';
+my $VERSION = '1.2';
+
+openlog($me, 'cons,pid', 'user');
 
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
+
+sub do_syslog($)
+{
+        my($logtxt) = @_;
+
+        syslog("info", "%s", "$logtxt") if ($syslog);
+
+}
 
 sub HELP_MESSAGE()
 {
 	my($fh) = @_;
 	
 	print $fh "Usage:\n"
-		. "  $me [-v] [-d] [-i <tunnelif>] [-a <localaddrs>] [-p <password>]\n"
+		. "  $me [-v] [-d] [-l] [-i <tunnelif>] [-a <localaddrs>] [-p <password>]\n"
 		. "Options:\n"
 		. "  -v   increase verbosity slightly to print error messages on stderr\n"
 		. "  -d   increase verbosity greatly (debug mode)\n"
@@ -86,6 +101,7 @@ sub HELP_MESSAGE()
 		. "       (list contains system's local IP addresses by default)\n"
 		. "  -p <password>\n"
 		. "       use RIPv2 password 'authentication', defaults to none\n"
+		. "  -l   enable syslog functionality\n"
 		;
 }
 
@@ -104,6 +120,7 @@ sub fill_local_ifs()
 	
 	while ($s =~ s/inet addr:(\d+\.\d+\.\d+\.\d+)//) {
 		warn "found local address: $1\n" if ($verbose);
+	        do_syslog("found local address: $1");
 		$my_addresses{$1} = 1;
 	}
 }
@@ -143,6 +160,7 @@ sub route_delete($)
 	if ($?) {
 		if ($verbose > 1 || $out !~ /No such process/) {
 			warn "route del failed: '$cmd': $out\n";
+                        do_syslog("route del failed: '$cmd': $out") if ($syslog);
 		}
 	}
 }
@@ -152,6 +170,7 @@ sub route_delete($)
 sub expire_routes()
 {
 	warn "expiring old routes\n" if ($verbose);
+        do_syslog("expiring old routes") if ($syslog);
 	
 	my $exp_t = time() - $route_ttl;
 	my $now = time();
@@ -160,6 +179,7 @@ sub expire_routes()
 		if ($current_routes{$rkey}->{'t'} < $exp_t) {
 			# expire route
 			warn "route $rkey has expired, deleting\n" if ($verbose);
+                        do_syslog("route $rkey has expired, deleting") if ($syslog);
 			route_delete($rkey);
 			delete $current_routes{$rkey};
 		} elsif ($current_routes{$rkey}->{'t'} > $now) {
@@ -183,11 +203,13 @@ sub consider_route($$$$)
 		&& $current_routes{$rkey}->{'rtag'} eq $rtag) {
 		# ok, current route is fine
 		warn "route $rkey is installed and current\n" if ($verbose > 1);
+                do_syslog("route $rkey is installed and current") if ($syslog);
 		$current_routes{$rkey}->{'t'} = time();
 		return;
 	}
 	
 	warn "route $rkey updated: via $nexthop rtag $rtag\n" if ($verbose > 1);
+        do_syslog("route $rkey updated: via $nexthop rtag $rtag") if ($syslog);
 	
 	$current_routes{$rkey} = {
 		'nh' => $nexthop,
@@ -202,6 +224,7 @@ sub consider_route($$$$)
 	$out = `$cmd 2>&1\n`;
 	if ($?) {
 		warn "route add failed: '$cmd': $out\n";
+                do_syslog("route add failed: '$cmd': $out") if ($syslog);
 	}
 }
 
@@ -214,12 +237,14 @@ sub process_rip_auth_entry($)
 	my $e_af = unpack('n', substr($entry, 0, 2));
 	if ($e_af != 0xFFFF) {
 		warn "RIPv2 first message does not contain auth password: ignoring\n" if ($verbose);
+                do_syslog("RIPv2 first message does not contain auth password: ignoring") if ($syslog);
 		return 0;
 	}
 	
 	my $e_type = unpack('n', substr($entry, 2, 2));
 	if ($e_type != RIP_AUTH_PASSWD) {
 		warn "ignoring unsupported rip auth type $e_type\n" if ($verbose);
+                do_syslog("ignoring unsupported rip auth type $e_type") if ($syslog);
 		return 0;
 	}
 	
@@ -228,11 +253,13 @@ sub process_rip_auth_entry($)
 	
 	if (!defined $rip_passwd) {
 		warn "RIPv2 packet contains password $e_passwd but we require none\n" if ($verbose);
+                do_syslog("RIPv2 packet contains password $e_passwd but we require none") if ($syslog);
 		return 0;
 	}
 	
 	if ($e_passwd ne $rip_passwd) {
 		warn "RIPv2 invalid password $e_passwd\n" if ($verbose);
+                do_syslog("RIPv2 invalid password $e_passwd") if ($syslog);
 		return 0;
 	}
 	
@@ -250,11 +277,13 @@ sub validate_route($$$$$)
 	my $prefix_len = mask2prefix($e_netmask);
 	if ($prefix_len < 0) {
 		warn "invalid netmask: $e_netmask_s\n" if ($verbose);
+                do_syslog("invalid netmask: $e_netmask_s") if ($syslog);
 		return (0, 'invalid netmask');
 	}
 	
 	if ($prefix_len < $minimum_prefix_len) {
 		warn "$e_net_s/$e_netmask_s => $e_nexthop_s blocked, prefix too short\n";
+                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, prefix too short") if ($syslog);
 		return (0, 'prefix length too short');
 	}
 	
@@ -262,24 +291,28 @@ sub validate_route($$$$$)
 	if (($e_net_i & $e_netmask) != $e_net_i) {
 		#print "e_net '$e_net_i' e_netmask '$e_netmask' ANDs to " . ($e_net_i & $e_netmask) . "\n";
 		warn "$e_net_s/$e_netmask_s => $e_nexthop_s blocked, subnet-netmask pair does not make sense\n" if ($verbose);
+                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, subnet-netmask pair does not make sense") if ($syslog);
 		return (0, 'invalid subnet-netmask pair');
 	}
 	
 	# network is in 44/8
 	if ($e_net_s !~ /$net_44_regexp/) {
 		warn "$e_net_s/$e_netmask_s => $e_nexthop_s blocked, non-amprnet address\n" if ($verbose);
+                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, non-amprnet address") if ($syslog);
 		return (0, 'net not in 44/8');
 	}
 	
 	# nexthop address is not in 44/8
 	if ($e_nexthop_s =~ /$net_44_regexp/) {
 		warn "$e_net_s/$e_netmask_s => $e_nexthop_s blocked, nexthop is within amprnet\n" if ($verbose);
+                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, nexthop is within amprnet") if ($syslog);
 		return (0, 'nexthop is in 44/8');
 	}
 	
 	# nexthop address does not point to self
 	if (defined $my_addresses{$e_nexthop_s}) {
 		warn "$e_net_s/$e_netmask_s => $e_nexthop_s blocked, local gw\n" if ($verbose);
+                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, local gw") if ($syslog);
 		return (0, 'local gw');
 	}
 	
@@ -397,7 +430,7 @@ sub process_msg($$$)
 
 # command line parsing
 my %opts;
-getopts('i:p:a:vd', \%opts);
+getopts('i:p:a:vdl', \%opts);
 
 if (defined $opts{'i'}) {
 	$tunnel_if = $opts{'i'};
@@ -416,6 +449,9 @@ if ($opts{'a'}) {
 		$my_addresses{$a} = 1;
 	}
 }
+if ($opts{'l'}) {
+	$syslog = 1;		
+}
 
 fill_local_ifs();
 
@@ -424,9 +460,10 @@ fill_local_ifs();
 system($ifconfig, $tunnel_if, 'multicast') == 0 or die "ifconfig $tunnel_if multicast failed: $?\n";
 
 # Create the UDP multicast socket to receive RIP broadcasts
-warn "opening UDP socket...\n" if ($verbose);
+warn "opening UDP socket $UDP_port...\n" if ($verbose);
+do_syslog("opening UDP socket $UDP_port...") if ($syslog);
 my $socket = IO::Socket::Multicast->new(
-	LocalPort => 520,
+	LocalPort =>  $UDP_port,
 	ReuseAddr => 1,
 ) or die $!;
 
@@ -438,6 +475,7 @@ my $next_expire = time() + $expire_interval;
 # Main loop: receive broadcasts, check that they're from the correct
 # address and port, and pass them on to processing
 warn "entering main loop, waiting for RIPv2 datagrams\n" if ($verbose);
+do_syslog("entering main loop, waiting for RIPv2 datagrams") if ($syslog);
 while (1) {
 	my $msg;
 	my $remote_address = recv($socket, $msg, 1500, 0);
@@ -451,13 +489,16 @@ while (1) {
 	
 	if ($addr_s ne '44.0.0.1' || $peer_port ne 520) {
 		warn "$me: ignored packet from $addr_s: $peer_port: " . length($msg) . "\n";
+                do_syslog("ignored packet from $addr_s: $peer_port: " . length($msg) ) if ($syslog);
 		next;
 	}
 	
 	warn "received from $addr_s: $peer_port: " . length($msg) . " bytes\n" if ($verbose);
+        do_syslog("received from $addr_s: $peer_port: " . length($msg) . " bytes") if ($syslog);
 	
 	my $routes = process_msg($addr_s, $peer_port, $msg);
 	warn "processed $routes route entries\n" if ($verbose && $routes >= 0);
+        do_syslog("processed $routes route entries") if ($syslog);
 	
 	# Consider expiring old routes. This is actually never run if we do not receive
 	# any RIP broadcasts at all (the recv() is blocking)
@@ -469,3 +510,4 @@ while (1) {
 	}
 }
 
+closelog();
