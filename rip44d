@@ -29,7 +29,7 @@
 #
 # - support for better authentication, if one would be supported
 # - support for multiple RIP masters, to fix the single point of failure
-# - support for sigh-up message, to remove the routing entries again without manual intervention
+# - support for sig-hup message, to remove the routing entries again without manual intervention
 #
 
 use strict;
@@ -70,14 +70,14 @@ my $route_ttl = 7*24*60*60;
 my %current_routes;
 
 my $me = 'rip44d';
-my $VERSION = '1.2';
+my $VERSION = '1.3';
 
 openlog($me, 'cons,pid', 'user');
 
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
-# This subroutine takes care of placing messages on std output, and into syslog facility
+# This subroutine takes care of placing messages on std output, and also into syslog facility
 
 sub do_syslog($)
 {
