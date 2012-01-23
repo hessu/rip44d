@@ -71,7 +71,7 @@ my $route_ttl = 7*24*60*60;
 my %current_routes;
 
 my $me = 'rip44d';
-my $VERSION = '1.4';
+my $VERSION = '1.2';
 
 openlog($me, 'cons,pid', 'user');
 
@@ -146,7 +146,6 @@ sub mask2prefix($)
 	return -1 if ($bits !~ /^(1*)(0*)$/);
 	
 	# The amount of 1's in the beginning is the prefix length.
-	do_syslog("subroutine mask2prefix " . length($1)) if ($verbose > 1);
 	return length($1);
 }
 
@@ -165,7 +164,7 @@ sub route_delete($)
 	if ($?) {
 		if ($verbose > 1 || $out !~ /No such process/) {
 			do_syslog("route del failed: '$cmd': $out");
-                }
+		}
 	}
 }
 
@@ -323,7 +322,7 @@ sub process_rip_route_entry($)
 	}
 	
 	if ($e_af != AF_INET) {
-		do_syslog("$me: RIPv2 entry has unsupported AF $e_af\n");
+		do_syslog("$me: RIPv2 entry has unsupported AF $e_af");
 		return 0;
 	}
 	
@@ -340,11 +339,11 @@ sub process_rip_route_entry($)
 	# Validate the route
 	my($result, $reason) = validate_route($e_net_i, $e_net_s, $e_netmask_i, $e_netmask_s, $e_nexthop_s);
 	if (!$result) {
-		do_syslog("entry ignored ($reason): af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric\n") if ($verbose);
+		do_syslog("entry ignored ($reason): af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric") if ($verbose);
 		return 0;
 	}
 	
-	do_syslog("entry: af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric\n") if ($verbose > 1);
+	do_syslog("entry: af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric") if ($verbose > 1);
 	
 	# Ok, we have a valid route, consider adding it in the kernel's routing table
 	consider_route($e_net_s, $e_netmask_s, $e_nexthop_s, $e_rtag);
@@ -416,8 +415,6 @@ sub process_msg($$$)
 #
 ####### main #############################################
 #
-
-do_syslog("$me starting...");
 
 # command line parsing
 my %opts;
@@ -496,4 +493,6 @@ while (1) {
 	}
 }
 
+# currently we never, ever get here, but in case a 'last' would appear above:
 closelog();
+
