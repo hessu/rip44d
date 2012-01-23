@@ -81,9 +81,9 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
 sub do_syslog($)
 {
-        my($logtxt) = @_;
-        warn "$logtxt\n";
-        syslog("info", "%s", "$logtxt");
+	my($logtxt) = @_;
+	warn "$logtxt\n";
+	syslog("info", "%s", "$logtxt");
 }
 
 sub HELP_MESSAGE()
@@ -119,7 +119,7 @@ sub fill_local_ifs()
 	my $s = `$ifconfig -a`;
 	
 	while ($s =~ s/inet addr:(\d+\.\d+\.\d+\.\d+)//) {
-	        do_syslog("found local address: $1") if ( $verbose >= 1 );
+		do_syslog("found local address: $1") if ( $verbose >= 1 );
 		$my_addresses{$1} = 1;
 	}
 }
@@ -141,7 +141,7 @@ sub mask2prefix($)
 	return -1 if ($bits !~ /^(1*)(0*)$/);
 	
 	# The amount of 1's in the beginning is the prefix length.
-        do_syslog("subroutine mask2prefix " . length($1)) if ($verbose > 1);
+	do_syslog("subroutine mask2prefix " . length($1)) if ($verbose > 1);
 	return length($1);
 }
 
@@ -159,7 +159,7 @@ sub route_delete($)
 	$out = `$cmd 2>&1`;
 	if ($?) {
 		if ($verbose > 1 || $out !~ /No such process/) {
-                        do_syslog("route del failed: '$cmd': $out");
+			do_syslog("route del failed: '$cmd': $out");
                 }
 	}
 }
@@ -168,7 +168,7 @@ sub route_delete($)
 
 sub expire_routes()
 {
-        do_syslog("expiring old routes") if ($verbose);
+	do_syslog("expiring old routes") if ($verbose);
 	
 	my $exp_t = time() - $route_ttl;
 	my $now = time();
@@ -176,7 +176,7 @@ sub expire_routes()
 	foreach my $rkey (keys %current_routes) {
 		if ($current_routes{$rkey}->{'t'} < $exp_t) {
 			# expire route
-                        do_syslog("route $rkey has expired, deleting") if ($verbose);
+			do_syslog("route $rkey has expired, deleting") if ($verbose);
 			route_delete($rkey);
 			delete $current_routes{$rkey};
 		} elsif ($current_routes{$rkey}->{'t'} > $now) {
@@ -199,12 +199,12 @@ sub consider_route($$$$)
 		&& $current_routes{$rkey}->{'nh'} eq $nexthop
 		&& $current_routes{$rkey}->{'rtag'} eq $rtag) {
 		# ok, current route is fine
-                do_syslog("route $rkey is installed and current") if ($verbose > 1);
+		do_syslog("route $rkey is installed and current") if ($verbose > 1);
 		$current_routes{$rkey}->{'t'} = time();
 		return;
 	}
 	
-        do_syslog("route $rkey updated: via $nexthop rtag $rtag") if ($verbose > 1);
+	do_syslog("route $rkey updated: via $nexthop rtag $rtag") if ($verbose > 1);
 	
 	$current_routes{$rkey} = {
 		'nh' => $nexthop,
@@ -218,7 +218,7 @@ sub consider_route($$$$)
 	$cmd = "LANG=C $routebin route add $rkey via $nexthop dev $tunnel_if window $tcp_window onlink";
 	$out = `$cmd 2>&1\n`;
 	if ($?) {
-                do_syslog("route add failed: '$cmd': $out");
+		do_syslog("route add failed: '$cmd': $out");
 	}
 }
 
@@ -230,13 +230,13 @@ sub process_rip_auth_entry($)
 	
 	my $e_af = unpack('n', substr($entry, 0, 2));
 	if ($e_af != 0xFFFF) {
-                do_syslog("RIPv2 first message does not contain auth password: ignoring") if ($verbose);
+		do_syslog("RIPv2 first message does not contain auth password: ignoring") if ($verbose);
 		return 0;
 	}
 	
 	my $e_type = unpack('n', substr($entry, 2, 2));
 	if ($e_type != RIP_AUTH_PASSWD) {
-                do_syslog("ignoring unsupported rip auth type $e_type") if ($verbose);
+		do_syslog("ignoring unsupported rip auth type $e_type") if ($verbose);
 		return 0;
 	}
 	
@@ -244,12 +244,12 @@ sub process_rip_auth_entry($)
 	$e_passwd =~ s/\0*$//; # it's null-padded in the end
 	
 	if (!defined $rip_passwd) {
-                do_syslog("RIPv2 packet contains password $e_passwd but we require none") if ($verbose);
+		do_syslog("RIPv2 packet contains password $e_passwd but we require none") if ($verbose);
 		return 0;
 	}
 	
 	if ($e_passwd ne $rip_passwd) {
-                do_syslog("RIPv2 invalid password $e_passwd") if ($verbose);
+		do_syslog("RIPv2 invalid password $e_passwd") if ($verbose);
 		return 0;
 	}
 	
@@ -266,37 +266,37 @@ sub validate_route($$$$$)
 	# netmask is correct and not too wide
 	my $prefix_len = mask2prefix($e_netmask);
 	if ($prefix_len < 0) {
-                do_syslog("invalid netmask: $e_netmask_s") if ($verbose);
+		do_syslog("invalid netmask: $e_netmask_s") if ($verbose);
 		return (0, 'invalid netmask');
 	}
 	
 	if ($prefix_len < $minimum_prefix_len) {
-                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, prefix too short") if ($verbose);
+		do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, prefix too short");
 		return (0, 'prefix length too short');
 	}
 	
 	# the network-netmask pair makes sense: network & netmask == network
 	if (($e_net_i & $e_netmask) != $e_net_i) {
 		#print "e_net '$e_net_i' e_netmask '$e_netmask' ANDs to " . ($e_net_i & $e_netmask) . "\n";
-                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, subnet-netmask pair does not make sense") if ($verbose);
+		do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, subnet-netmask pair does not make sense") if ($verbose);
 		return (0, 'invalid subnet-netmask pair');
 	}
 	
 	# network is in 44/8
 	if ($e_net_s !~ /$net_44_regexp/) {
-                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, non-amprnet address") if ($verbose);
+		do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, non-amprnet address") if ($verbose);
 		return (0, 'net not in 44/8');
 	}
 	
 	# nexthop address is not in 44/8
 	if ($e_nexthop_s =~ /$net_44_regexp/) {
-                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, nexthop is within amprnet") if ($verbose);
+		do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, nexthop is within amprnet") if ($verbose);
 		return (0, 'nexthop is in 44/8');
 	}
 	
 	# nexthop address does not point to self
 	if (defined $my_addresses{$e_nexthop_s}) {
-                do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, local gw") if ($verbose);
+		do_syslog("$e_net_s/$e_netmask_s => $e_nexthop_s blocked, local gw") if ($verbose);
 		return (0, 'local gw');
 	}
 	
@@ -456,7 +456,7 @@ my $next_expire = time() + $expire_interval;
 
 # Main loop: receive broadcasts, check that they're from the correct
 # address and port, and pass them on to processing
-do_syslog("entering main loop, waiting for RIPv2 datagrams") if ( $verbose >= 0 );
+do_syslog("entering main loop, waiting for RIPv2 datagrams") if ($verbose);
 while (1) {
 	my $msg;
 	my $remote_address = recv($socket, $msg, 1500, 0);
@@ -469,14 +469,14 @@ while (1) {
 	my $addr_s = inet_ntoa($peer_addr);
 	
 	if ($addr_s ne '44.0.0.1' || $peer_port ne 520) {
-                do_syslog("ignored packet from $addr_s: $peer_port: " . length($msg) ) if ( $verbose >= 1 );
+		do_syslog("ignored packet from $addr_s: $peer_port: " . length($msg) );
 		next;
 	}
 	
-        do_syslog("received from $addr_s: $peer_port: " . length($msg) . " bytes") if ($verbose);
+	do_syslog("received from $addr_s: $peer_port: " . length($msg) . " bytes") if ($verbose);
 	
 	my $routes = process_msg($addr_s, $peer_port, $msg);
-        do_syslog("processed $routes route entries") if ($verbose && $routes >= 0);
+	do_syslog("processed $routes route entries") if ($verbose && $routes >= 0);
 	
 	# Consider expiring old routes. This is actually never run if we do not receive
 	# any RIP broadcasts at all (the recv() is blocking)
