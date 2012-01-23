@@ -54,7 +54,8 @@ my $route_table = '';
 my $routebin = '/sbin/ip';
 my $ifconfig = '/sbin/ifconfig';
 my $verbose = 0;
-my $UDP_port=520;
+my $udp_port = 520;
+my $log_syslog = 0;
 # Local gateway addresses (whose routes are skipped)
 my %my_addresses;
 # Allowed route destination networks
@@ -73,8 +74,6 @@ my %current_routes;
 my $me = 'rip44d';
 my $VERSION = '1.2';
 
-openlog($me, 'cons,pid', 'user');
-
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
@@ -83,8 +82,12 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1;
 sub do_syslog($)
 {
 	my($logtxt) = @_;
-	warn "$logtxt\n";
-	syslog("info", "%s", "$logtxt");
+	
+	if ($log_syslog) {
+		syslog("info", "%s", $logtxt);
+	} else {
+		warn "$logtxt\n";
+	}
 }
 
 sub HELP_MESSAGE()
@@ -92,11 +95,12 @@ sub HELP_MESSAGE()
 	my($fh) = @_;
 	
 	print $fh "Usage:\n"
-		. "  $me [-v] [-d] [-i <tunnelif>] [-a <localaddrs>] [-p <password>]\n"
+		. "  $me [-v] [-d] [-s] [-i <tunnelif>] [-a <localaddrs>] [-p <password>]\n"
 		. "      [-t <routingtable>]\n"
 		. "Options:\n"
 		. "  -v   increase verbosity slightly to print error messages on stderr\n"
 		. "  -d   increase verbosity greatly (debug mode)\n"
+		. "  -s   log to syslog instead of stderr\n"
 		. "  -i <tunnelinterface>\n"
 		. "       use the specified tunnel interface, defaults to tunl0\n"
 		. "  -a <comma-separated-ip-list>\n"
@@ -418,7 +422,7 @@ sub process_msg($$$)
 
 # command line parsing
 my %opts;
-getopts('i:p:a:t:vd', \%opts);
+getopts('i:p:a:t:vds', \%opts);
 
 if (defined $opts{'i'}) {
 	$tunnel_if = $opts{'i'};
@@ -435,11 +439,17 @@ if ($opts{'v'} && !$verbose) {
 if ($opts{'d'}) {
 	$verbose = 2;		
 }
+if ($opts{'s'}) {
+	$log_syslog = 1;		
+}
 if ($opts{'a'}) {
 	foreach my $a (split(',', $opts{'a'})) {
 		$my_addresses{$a} = 1;
 	}
 }
+
+
+openlog($me, 'cons,pid', 'user') if ($log_syslog);
 
 fill_local_ifs();
 
@@ -448,9 +458,9 @@ fill_local_ifs();
 system($ifconfig, $tunnel_if, 'multicast') == 0 or die "ifconfig $tunnel_if multicast failed: $?\n";
 
 # Create the UDP multicast socket to receive RIP broadcasts
-do_syslog("opening UDP socket $UDP_port...") if ($verbose);
+do_syslog("opening UDP socket $udp_port...") if ($verbose);
 my $socket = IO::Socket::Multicast->new(
-	LocalPort =>  $UDP_port,
+	LocalPort => $udp_port,
 	ReuseAddr => 1,
 ) or die $!;
 
@@ -494,5 +504,5 @@ while (1) {
 }
 
 # currently we never, ever get here, but in case a 'last' would appear above:
-closelog();
+closelog() if ($log_syslog);
 
