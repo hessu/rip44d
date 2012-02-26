@@ -150,7 +150,7 @@ sub mask2prefix($)
 	return -1 if ($bits !~ /^(1*)(0*)$/);
 	
 	# The amount of 1's in the beginning is the prefix length.
-	return length($1);
+	return length($bits);
 }
 
 # delete a route from the kernel's table
@@ -198,11 +198,11 @@ sub expire_routes()
 
 # Consider adding a route in the routing table
 
-sub consider_route($$$$)
+sub consider_route($$$$$)
 {
-	my($net, $mask, $nexthop, $rtag) = @_;
+	my($net, $mask, $plen, $nexthop, $rtag) = @_;
 	
-	my $rkey = "$net/$mask";
+	my $rkey = "$net/$plen";
 	if (defined $current_routes{$rkey}
 		&& $current_routes{$rkey}->{'nh'} eq $nexthop
 		&& $current_routes{$rkey}->{'rtag'} eq $rtag) {
@@ -267,12 +267,11 @@ sub process_rip_auth_entry($)
 # validate a route entry, make sure we can rather safely
 # insert it in the routing table
 
-sub validate_route($$$$$)
+sub validate_route($$$$$$)
 {
-	my($e_net_i, $e_net_s, $e_netmask, $e_netmask_s, $e_nexthop_s) = @_;
+	my($e_net_i, $e_net_s, $e_netmask, $prefix_len, $e_netmask_s, $e_nexthop_s) = @_;
 	
 	# netmask is correct and not too wide
-	my $prefix_len = mask2prefix($e_netmask);
 	if ($prefix_len < 0) {
 		do_syslog("invalid netmask: $e_netmask_s") if ($verbose);
 		return (0, 'invalid netmask');
@@ -339,9 +338,10 @@ sub process_rip_route_entry($)
 	my $e_net_s = inet_ntoa($e_net);
 	my $e_netmask_s = inet_ntoa($e_netmask);
 	my $e_nexthop_s = inet_ntoa($e_nexthop);
+	my $e_prefix_len = mask2prefix($e_netmask_i);
 	
 	# Validate the route
-	my($result, $reason) = validate_route($e_net_i, $e_net_s, $e_netmask_i, $e_netmask_s, $e_nexthop_s);
+	my($result, $reason) = validate_route($e_net_i, $e_net_s, $e_netmask_i, $e_prefix_len, $e_netmask_s, $e_nexthop_s);
 	if (!$result) {
 		do_syslog("entry ignored ($reason): af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric") if ($verbose);
 		return 0;
@@ -350,7 +350,7 @@ sub process_rip_route_entry($)
 	do_syslog("entry: af $e_af rtag $e_rtag $e_net_s/$e_netmask_s via $e_nexthop_s metric $e_metric") if ($verbose > 1);
 	
 	# Ok, we have a valid route, consider adding it in the kernel's routing table
-	consider_route($e_net_s, $e_netmask_s, $e_nexthop_s, $e_rtag);
+	consider_route($e_net_s, $e_netmask_s, $e_prefix_len, $e_nexthop_s, $e_rtag);
 	
 	return 1;
 }
