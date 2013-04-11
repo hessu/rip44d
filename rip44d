@@ -40,6 +40,7 @@ use warnings;
 use IO::Socket::Multicast;
 use Getopt::Std;
 use Sys::Syslog;
+use Fcntl qw(:flock);
 
 use constant {
 	RIP_HDR_LEN => 4,
@@ -55,6 +56,7 @@ my $tunnel_if = 'tunl0';
 my $route_table = '';
 my $routebin = '/sbin/ip';
 my $ifconfig = '/sbin/ifconfig';
+my $pidfile = '/var/run/rip44d.pid';
 my $verbose = 0;
 my $udp_port = 520;
 my $log_syslog = 0;
@@ -121,6 +123,19 @@ sub VERSION_MESSAGE()
 	my($fh) = @_;
 	
 	print $fh "$me version $VERSION\n";
+}
+
+# write and lock pid file
+
+sub writepid($)
+{
+	my($f) = @_;
+	open(PF, ">>$f") || die "Could not open $f for writing pid: $!";
+	my $ofh = select(PF); $| = 1; select($ofh); # autoflush
+	flock(PF, LOCK_EX|LOCK_NB) || die "Could not flock pid file (other copy already running?): $!";
+	truncate(PF, 0) || die "Could not truncate pid file: $!";
+	seek(PF, 0, 0) || die "Could not seek to beginning of pid file: $!";
+	print PF "$$\n" || die "Could not write pid to $f: $!";
 }
 
 # Figure out local interface IP addresses so that routes to them can be ignored
@@ -424,13 +439,16 @@ sub process_msg($$$)
 
 # command line parsing
 my %opts;
-getopts('i:p:a:t:vds', \%opts);
+getopts('i:p:l:a:t:vds', \%opts);
 
 if (defined $opts{'i'}) {
 	$tunnel_if = $opts{'i'};
 }
 if (defined $opts{'p'}) {
 	$rip_passwd = $opts{'p'};
+}
+if (defined $opts{'l'}) {
+	$pidfile = $opts{'l'};
 }
 if (defined $opts{'t'}) {
 	$route_table = " table " . $opts{'t'};
@@ -450,8 +468,8 @@ if ($opts{'a'}) {
 	}
 }
 
-
 openlog($me, 'cons,pid', 'user') if ($log_syslog);
+writepid($pidfile);
 
 fill_local_ifs();
 
