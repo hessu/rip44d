@@ -26,6 +26,10 @@
 #	* Added syslog functionality, using module: http://perldoc.perl.org/Sys/Syslog.html
 #	* Fixed to use CIDR format when calling /sbin/ip, to support older distributions
 #
+# v1.3 - 2013-04-11 Heikki Hannikainen, OH7LZB
+#	* write pid file and lock it to prevent running multiple copies
+#	* fix a bug in interim version after 1.2: added routes with wrong prefix length
+#
 
 # Things to do in the future:
 #
@@ -76,7 +80,7 @@ my $route_ttl = 7*24*60*60;
 my %current_routes;
 
 my $me = 'rip44d';
-my $VERSION = '1.2';
+my $VERSION = '1.3';
 
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
@@ -94,13 +98,13 @@ sub do_syslog($)
 	}
 }
 
-sub HELP_MESSAGE()
+sub HELP_MESSAGE($)
 {
 	my($fh) = @_;
 	
 	print $fh "Usage:\n"
 		. "  $me [-v] [-d] [-s] [-i <tunnelif>] [-a <localaddrs>] [-p <password>]\n"
-		. "      [-t <routingtable>]\n"
+		. "      [-t <routingtable>] [-l <pidlockfile>]\n"
 		. "Options:\n"
 		. "  -v   increase verbosity slightly to print error messages on stderr\n"
 		. "  -d   increase verbosity greatly (debug mode)\n"
@@ -115,6 +119,9 @@ sub HELP_MESSAGE()
 		. "  -t <routingtable>\n"
 		. "       insert routes in an alternate named routing table\n"
 		. "       (ip route add .. table <routingtable>)\n"
+		. "  -l <pidlockfile>\n"
+		. "       write process ID to given file instead of default\n"
+		. "       (/var/run/rip44d.pid)\n"
 		;
 }
 
@@ -439,7 +446,7 @@ sub process_msg($$$)
 
 # command line parsing
 my %opts;
-getopts('i:p:l:a:t:vds', \%opts);
+getopts('i:p:l:a:t:vhds', \%opts);
 
 if (defined $opts{'i'}) {
 	$tunnel_if = $opts{'i'};
@@ -466,6 +473,10 @@ if ($opts{'a'}) {
 	foreach my $a (split(',', $opts{'a'})) {
 		$my_addresses{$a} = 1;
 	}
+}
+if ($opts{'h'}) {
+	HELP_MESSAGE(*STDOUT);
+	exit(0);
 }
 
 openlog($me, 'cons,pid', 'user') if ($log_syslog);
