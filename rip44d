@@ -79,6 +79,17 @@ my $VERSION = '1.2';
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 
+
+sub check_existing_process
+{
+        my $test_proc = `ps -e | grep "rip44d" | grep -v grep | wc -l`;
+        if ( $test_proc > 1 )
+        {
+                do_syslog("Another instance of rip44d seems to be running, exiting");
+                exit(0);
+        }
+}
+
 # This subroutine takes care of placing messages on std output, and also into syslog facility
 
 sub do_syslog($)
@@ -452,6 +463,8 @@ if ($opts{'a'}) {
 
 
 openlog($me, 'cons,pid', 'user') if ($log_syslog);
+
+check_existing_process;
 
 fill_local_ifs();
 
