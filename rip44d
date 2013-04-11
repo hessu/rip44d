@@ -152,7 +152,7 @@ sub mask2prefix($)
 	return -1 if ($bits !~ /^(1*)(0*)$/);
 	
 	# The amount of 1's in the beginning is the prefix length.
-	return length($bits);
+	return length($1);
 }
 
 # delete a route from the kernel's table
