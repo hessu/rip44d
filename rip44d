@@ -68,8 +68,8 @@ my $log_syslog = 0;
 my %my_addresses;
 # Allowed route destination networks
 my $net_44_regexp = '^44\.';
-# We do not accept routes less specific than /15
-my $minimum_prefix_len = 15;
+# We do not accept routes less specific than /14
+my $minimum_prefix_len = 14;
 # tcp window to set
 my $tcp_window = 840;
 # time (in seconds) to use routes which are no longer advertised
