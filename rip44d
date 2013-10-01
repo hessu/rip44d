@@ -30,6 +30,10 @@
 #	* write pid file and lock it to prevent running multiple copies
 #	* fix a bug in interim version after 1.2: added routes with wrong prefix length
 #
+# v1.4 - 2013-10-01 Heikki Hannikainen, OH7LZB
+#	* Set up an initial dummy route for 44.0.0.1 at startup to prevent
+#	  rp_filter from dropping incoming RIP packets
+#
 
 # Things to do in the future:
 #
@@ -80,7 +84,7 @@ my $route_ttl = 7*24*60*60;
 my %current_routes;
 
 my $me = 'rip44d';
-my $VERSION = '1.3';
+my $VERSION = '1.4';
 
 # help and version texts
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
@@ -497,6 +501,13 @@ my $socket = IO::Socket::Multicast->new(
 
 $socket->mcast_add('224.0.0.9', $tunnel_if) or die $!;
 
+# Set up a route pointing towards amprgw on the tunnel interface,
+# so that rp_filter (strict reverse path filtering) will not
+# make the kernel drop packets.
+my $init_r_cmd = "LANG=C $routebin route add 44.0.0.1/32 dev $tunnel_if $route_table";
+my $init_r_out = `$init_r_cmd 2>&1\n`;
+
+# when to expire old routes
 my $expire_interval = 60*60;
 my $next_expire = time() + $expire_interval;
 
