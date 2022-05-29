@@ -45,6 +45,7 @@
 use strict;
 use warnings;
 
+use Proc::Daemon;
 use IO::Socket::Multicast;
 use Getopt::Std;
 use Sys::Syslog;
@@ -80,6 +81,7 @@ my $tcp_window = 840;
 # from mirrorshades stop, the network won't go down right away.
 my $route_ttl = 7*24*60*60;
 my $mask = 0;
+my $continue_exec = 1;
 
 my %current_routes;
 
@@ -482,6 +484,14 @@ if ($opts{'h'}) {
 	HELP_MESSAGE(*STDOUT);
 	exit(0);
 }
+if (!$opts{'d'}) {
+        Proc::Daemon::Init;
+
+        $SIG{TERM} = sub {
+                $continue_exec = 0
+        };
+}
+
 
 openlog($me, 'cons,pid', 'user') if ($log_syslog);
 writepid($pidfile);
@@ -514,7 +524,7 @@ my $next_expire = time() + $expire_interval;
 # Main loop: receive broadcasts, check that they're from the correct
 # address and port, and pass them on to processing
 do_syslog("entering main loop, waiting for RIPv2 datagrams") if ($verbose);
-while (1) {
+while ($continue_exec) {
 	my $msg;
 	my $remote_address = recv($socket, $msg, 1500, 0);
 	
