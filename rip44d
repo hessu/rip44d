@@ -79,6 +79,7 @@ my $tcp_window = 840;
 # - this is set to a large value, so that if the rip advertisements
 # from mirrorshades stop, the network won't go down right away.
 my $route_ttl = 7*24*60*60;
+my $mask = 0;
 
 my %current_routes;
 
