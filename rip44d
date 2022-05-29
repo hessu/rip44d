@@ -545,6 +545,8 @@ while (1) {
 	}
 }
 
+$socket->mcast_drop('224.0.0.9');
+
 # currently we never, ever get here, but in case a 'last' would appear above:
 closelog() if ($log_syslog);
 
