@@ -195,6 +195,7 @@ sub route_delete($)
 	my($out, $cmd);
 	$cmd = "LANG=C $routebin route del $rkey $route_table";
 	$out = `$cmd 2>&1`;
+        chomp($out);
 	if ($?) {
 		if ($verbose > 1 || $out !~ /No such process/) {
 			do_syslog("route del failed: '$cmd': $out");
