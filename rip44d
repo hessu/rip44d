@@ -45,6 +45,7 @@
 use strict;
 use warnings;
 
+use File::Which;
 use Proc::Daemon;
 use IO::Socket::Multicast;
 use Getopt::Std;
@@ -63,7 +64,7 @@ use constant {
 my $rip_passwd;
 my $tunnel_if = 'tunl0';
 my $route_table = '';
-my $routebin = '/sbin/ip';
+my $routebin = which 'ip';
 my $pidfile = '/var/run/rip44d.pid';
 my $verbose = 0;
 my $udp_port = 520;
