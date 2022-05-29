@@ -63,7 +63,6 @@ my $rip_passwd;
 my $tunnel_if = 'tunl0';
 my $route_table = '';
 my $routebin = '/sbin/ip';
-my $ifconfig = '/sbin/ifconfig';
 my $pidfile = '/var/run/rip44d.pid';
 my $verbose = 0;
 my $udp_port = 520;
@@ -153,9 +152,9 @@ sub writepid($)
 
 sub fill_local_ifs()
 {
-	my $s = `$ifconfig -a`;
+	my $s = `$routebin addr show`;
 	
-	while ($s =~ s/inet addr:(\d+\.\d+\.\d+\.\d+)//) {
+	while ($s =~ s/inet (\d+\.\d+\.\d+\.\d+) //) {
 		do_syslog("found local address: $1") if ($verbose);
 		$my_addresses{$1} = 1;
 	}
@@ -490,7 +489,7 @@ fill_local_ifs();
 
 # Enable multicast on the tunnel interface, the flag is
 # not set by default
-system($ifconfig, $tunnel_if, 'multicast') == 0 or die "ifconfig $tunnel_if multicast failed: $?\n";
+system("$routebin link set ".$tunnel_if." multicast on") == 0 or die "ifconfig $tunnel_if multicast failed: $?\n";
 
 # Create the UDP multicast socket to receive RIP broadcasts
 do_syslog("opening UDP socket $udp_port...") if ($verbose);
